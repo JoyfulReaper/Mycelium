@@ -3,7 +3,9 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Console;
 using Mycelium.Cli;
+using Mycelium.Contracts.Plugins;
 using Mycelium.Core;
+using Mycelium.Plugins.HtmlLinks;
 
 HostApplicationBuilder builder =
     Host.CreateApplicationBuilder(args);
@@ -22,6 +24,7 @@ builder.Logging.AddSimpleConsole(options =>
 });
 
 builder.Services.AddMyceliumCore(builder.Configuration);
+builder.Services.AddSingleton<ICrawlPlugin, HtmlLinkDiscoveryPlugin>();
 builder.Services.AddSingleton<MyceliumApplication>();
 
 using IHost host = builder.Build();

@@ -15,6 +15,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Mycelium.Contracts\Mycelium.Contracts.csproj" />
     <ProjectReference Include="..\Mycelium.Core\Mycelium.Core.csproj" />
+    <ProjectReference Include="..\Mycelium.Plugins.HtmlLinks\Mycelium.Plugins.HtmlLinks.csproj" />
   </ItemGroup>
 
   <ItemGroup>
