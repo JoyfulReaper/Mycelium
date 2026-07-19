@@ -1,16 +1,21 @@
 ﻿using Microsoft.Extensions.Logging;
+using Mycelium.Contracts.Crawling;
 using Mycelium.Contracts.Plugins;
+using Mycelium.Core.Fetching;
+using Mycelium.Core.Plugins;
 
 namespace Mycelium.Cli;
 
 public sealed class MyceliumApplication(
     IEnumerable<ICrawlPlugin> plugins,
+    IPageFetcher pageFetcher,
+    ICrawlPluginPipeline pluginPipeline,
     ILogger<MyceliumApplication> logger)
 {
     private readonly IReadOnlyList<ICrawlPlugin> _plugins =
         plugins.ToArray();
 
-    public Task<int> RunAsync(
+    public async Task<int> RunAsync(
         string[] args,
         CancellationToken cancellationToken)
     {
@@ -24,7 +29,7 @@ public sealed class MyceliumApplication(
             IsHelpCommand(args[0]))
         {
             WriteHelp();
-            return Task.FromResult(0);
+            return 0;
         }
 
         if (string.Equals(
@@ -32,7 +37,17 @@ public sealed class MyceliumApplication(
                 "plugins",
                 StringComparison.OrdinalIgnoreCase))
         {
-            return Task.FromResult(RunPluginsCommand(args));
+            return RunPluginsCommand(args);
+        }
+
+        if (string.Equals(
+            args[0],
+            "fetch",
+            StringComparison.OrdinalIgnoreCase))
+        {
+            return await RunFetchCommandAsync(
+                args,
+                cancellationToken);
         }
 
         logger.LogWarning(
@@ -45,7 +60,78 @@ public sealed class MyceliumApplication(
 
         WriteHelp();
 
-        return Task.FromResult(2);
+        return 2;
+    }
+
+    private async Task<int> RunFetchCommandAsync(
+        string[] args,
+        CancellationToken cancellationToken)
+    {
+        if (args.Length != 2 ||
+            !Uri.TryCreate(
+                args[1],
+                UriKind.Absolute,
+                out Uri? uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp &&
+             uri.Scheme != Uri.UriSchemeHttps))
+        {
+            Console.Error.WriteLine(
+                "Usage: mycelium fetch <http-or-https-url>");
+
+            return 2;
+        }
+
+        try
+        {
+            var request = new CrawlRequest
+            {
+                Uri = uri,
+                Mode = FetchMode.Http
+            };
+
+            CrawlDocument document =
+                await pageFetcher.FetchAsync(
+                    request,
+                    cancellationToken);
+
+            CrawlPluginResult pluginResult =
+                await pluginPipeline.ExecuteAsync(
+                    document,
+                    cancellationToken);
+
+            Console.WriteLine($"Requested:    {request.Uri}");
+            Console.WriteLine($"Final URL:    {document.FinalUri}");
+            Console.WriteLine(
+                $"Status:       {(int)document.StatusCode} " +
+                $"{document.StatusCode}");
+            Console.WriteLine(
+                $"Content type: {document.ContentType ?? "unknown"}");
+            Console.WriteLine(
+                $"Bytes:        {document.Content.Length}");
+            Console.WriteLine(
+                $"Text decoded: {document.TextContent is not null}");
+            Console.WriteLine(
+                $"Duration:     {document.Duration.TotalMilliseconds:F1} ms");
+            Console.WriteLine(
+                $"URLs found:   {pluginResult.DiscoveredUrls.Count}");
+            Console.WriteLine(
+                $"Findings:     {pluginResult.Findings.Count}");
+
+            return 0;
+        }
+        catch (Exception exception)
+            when (exception is
+                HttpRequestException or
+                TimeoutException or
+                ResponseTooLargeException)
+        {
+            logger.LogError(
+                exception,
+                "Unable to fetch {Uri}.",
+                uri);
+
+            return 1;
+        }
     }
 
     private int RunPluginsCommand(string[] args)
@@ -101,6 +187,7 @@ public sealed class MyceliumApplication(
               mycelium <command> [options]
 
             Commands:
+              fetch <url>     Fetch one URL and run its content through the plugin pipeline
               plugins list    List registered crawl plugins
               help            Show this help
 

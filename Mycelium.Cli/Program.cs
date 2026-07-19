@@ -21,7 +21,7 @@ builder.Logging.AddSimpleConsole(options =>
         LoggerColorBehavior.Disabled;
 });
 
-builder.Services.AddMyceliumCore();
+builder.Services.AddMyceliumCore(builder.Configuration);
 builder.Services.AddSingleton<MyceliumApplication>();
 
 using IHost host = builder.Build();
