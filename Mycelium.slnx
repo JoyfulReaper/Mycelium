@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="Mycelium.Cli/Mycelium.Cli.csproj" />
+  <Project Path="Mycelium.Contracts/Mycelium.Contracts.csproj" />
+  <Project Path="Mycelium.Core/Mycelium.Core.csproj" />
+  <Project Path="Mycelium.Test/Mycelium.Test.csproj" />
+</Solution>
