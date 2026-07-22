@@ -2,9 +2,11 @@
 
 namespace Mycelium.Core.Fetching;
 
-public interface IPageFetcher
+public interface IResourceFetcher
 {
-    Task<CrawlDocument> FetchAsync(
+    bool CanFetch(Uri uri);
+
+    Task<FetchedResource> FetchAsync(
         CrawlRequest request,
         CancellationToken cancellationToken);
 }

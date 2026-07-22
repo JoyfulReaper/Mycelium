@@ -15,10 +15,4 @@ public sealed record CrawlPluginResult
         get;
         init;
     } = [];
-
-    public BrowserRenderRequest? RenderRequest
-    {
-        get;
-        init;
-    }
 }

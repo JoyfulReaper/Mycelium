@@ -7,10 +7,10 @@ using System.Text;
 
 namespace Mycelium.Test.Fetching;
 
-public sealed class HttpPageFetcherTests
+public sealed class HttpResourceFetcherTests
 {
     [Fact]
-    public async Task FetchAsync_ReturnsTextDocument()
+    public async Task FetchAsync_ReturnsTextResource()
     {
         const string Html =
             "<html><body>Mycelium</body></html>";
@@ -31,21 +31,39 @@ public sealed class HttpPageFetcherTests
                 return Task.FromResult(response);
             });
 
-        HttpPageFetcher fetcher =
+        HttpResourceFetcher fetcher =
             CreateFetcher(handler);
 
-        CrawlDocument document =
+        FetchedResource resource =
             await fetcher.FetchAsync(
                 CreateRequest(),
                 CancellationToken.None);
 
-        Assert.Equal(
-            HttpStatusCode.OK,
-            document.StatusCode);
+        Assert.NotNull(resource.ProtocolStatus);
 
-        Assert.Equal(Html, document.TextContent);
-        Assert.NotEmpty(document.Content.ToArray());
-        Assert.Equal(FetchMode.Http, document.FetchMode);
+        Assert.Equal(
+            "200",
+            resource.ProtocolStatus.Code);
+
+        Assert.Equal(
+            "OK",
+            resource.ProtocolStatus.Description);
+
+        Assert.Equal(
+            "http",
+            resource.Protocol);
+
+        Assert.StartsWith(
+            "text/html",
+            resource.MediaType,
+            StringComparison.OrdinalIgnoreCase);
+
+        Assert.Equal(
+            Html,
+            resource.TextContent);
+
+        Assert.NotEmpty(
+            resource.Content.ToArray());
     }
 
     [Fact]
@@ -68,16 +86,23 @@ public sealed class HttpPageFetcherTests
                     });
             });
 
-        HttpPageFetcher fetcher =
+        HttpResourceFetcher fetcher =
             CreateFetcher(handler);
 
-        CrawlDocument document =
+        FetchedResource resource =
             await fetcher.FetchAsync(
                 CreateRequest(),
                 CancellationToken.None);
 
-        Assert.Null(document.TextContent);
-        Assert.Equal(4, document.Content.Length);
+        Assert.Null(resource.TextContent);
+
+        Assert.Equal(
+            "application/octet-stream",
+            resource.MediaType);
+
+        Assert.Equal(
+            4,
+            resource.Content.Length);
     }
 
     [Fact]
@@ -98,7 +123,7 @@ public sealed class HttpPageFetcherTests
                     });
             });
 
-        HttpPageFetcher fetcher =
+        HttpResourceFetcher fetcher =
             CreateFetcher(
                 handler,
                 maximumBytes: 16);
@@ -127,7 +152,9 @@ public sealed class HttpPageFetcherTests
                             HttpStatusCode.Redirect);
 
                     redirect.Headers.Location =
-                        new Uri("/final", UriKind.Relative);
+                        new Uri(
+                            "/final",
+                            UriKind.Relative);
 
                     return Task.FromResult(redirect);
                 }
@@ -145,22 +172,53 @@ public sealed class HttpPageFetcherTests
                     });
             });
 
-        HttpPageFetcher fetcher =
+        HttpResourceFetcher fetcher =
             CreateFetcher(handler);
 
-        CrawlDocument document =
+        FetchedResource resource =
             await fetcher.FetchAsync(
                 CreateRequest(),
                 CancellationToken.None);
 
         Assert.Equal(
             new Uri("https://example.com/final"),
-            document.FinalUri);
+            resource.FinalUri);
 
-        Assert.Equal(2, requestCount);
+        Assert.Equal(
+            "200",
+            resource.ProtocolStatus?.Code);
+
+        Assert.Equal(
+            2,
+            requestCount);
     }
 
-    private static HttpPageFetcher CreateFetcher(
+    [Theory]
+    [InlineData("http://example.com/", true)]
+    [InlineData("https://example.com/", true)]
+    [InlineData("gopher://example.com/", false)]
+    [InlineData("ftp://example.com/", false)]
+    public void CanFetch_ReturnsExpectedResult(
+        string uri,
+        bool expected)
+    {
+        HttpResourceFetcher fetcher =
+            CreateFetcher(
+                new DelegateHandler(
+                    (_, _) =>
+                        throw new InvalidOperationException(
+                            "No request should be sent.")));
+
+        bool result =
+            fetcher.CanFetch(
+                new Uri(uri));
+
+        Assert.Equal(
+            expected,
+            result);
+    }
+
+    private static HttpResourceFetcher CreateFetcher(
         HttpMessageHandler handler,
         int maximumBytes = 4096)
     {
@@ -169,7 +227,7 @@ public sealed class HttpPageFetcherTests
             Timeout = Timeout.InfiniteTimeSpan
         };
 
-        return new HttpPageFetcher(
+        return new HttpResourceFetcher(
             client,
             Options.Create(
                 new HttpFetchOptions
@@ -179,14 +237,14 @@ public sealed class HttpPageFetcherTests
                     MaxRedirects = 5,
                     UserAgent = "Mycelium.Test"
                 }),
-            NullLogger<HttpPageFetcher>.Instance);
+            NullLogger<HttpResourceFetcher>.Instance);
     }
 
     private static CrawlRequest CreateRequest() =>
         new()
         {
-            Uri = new Uri("https://example.com/"),
-            Mode = FetchMode.Http
+            Uri = new Uri(
+                "https://example.com/")
         };
 
     private sealed class DelegateHandler(
@@ -199,6 +257,8 @@ public sealed class HttpPageFetcherTests
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken) =>
-            handler(request, cancellationToken);
+            handler(
+                request,
+                cancellationToken);
     }
 }

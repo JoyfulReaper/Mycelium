@@ -2,6 +2,7 @@
 using AngleSharp.Html.Parser;
 using Mycelium.Contracts.Crawling;
 using Mycelium.Contracts.Plugins;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Mycelium.Plugins.HtmlLinks;
 
@@ -12,14 +13,15 @@ public sealed class HtmlLinkDiscoveryPlugin : ICrawlPlugin
     public string Name => "html-links";
 
     public ValueTask<CrawlPluginResult> ProcessAsync(
-        CrawlDocument document,
+        FetchedResource resource,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(document);
+        ArgumentNullException.ThrowIfNull(resource);
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (!CanProcess(document))
+        if (resource.TextContent is not { } textContent ||
+        !CanProcessMediaType(resource.MediaType))
         {
             return ValueTask.FromResult(
                 CrawlPluginResult.Empty);
@@ -28,14 +30,13 @@ public sealed class HtmlLinkDiscoveryPlugin : ICrawlPlugin
         var parser = new HtmlParser();
 
         IDocument htmlDocument =
-            parser.ParseDocument(
-                document.TextContent!);
+            parser.ParseDocument(textContent);
 
         cancellationToken.ThrowIfCancellationRequested();
 
         Uri baseUri = ResolveBaseUri(
             htmlDocument,
-            document.FinalUri);
+            resource.FinalUri);
 
         var discoveredUrls =
             new List<DiscoveredUrl>();
@@ -73,20 +74,18 @@ public sealed class HtmlLinkDiscoveryPlugin : ICrawlPlugin
             });
     }
 
-    private static bool CanProcess(
-        CrawlDocument document)
+    private static bool CanProcessMediaType(
+        string? mediaType)
     {
-        if (document.TextContent is null ||
-            string.IsNullOrWhiteSpace(
-                document.ContentType))
+        if (string.IsNullOrWhiteSpace(mediaType))
         {
             return false;
         }
 
-        return document.ContentType.StartsWith(
+        return mediaType.StartsWith(
                    "text/html",
                    StringComparison.OrdinalIgnoreCase) ||
-               document.ContentType.StartsWith(
+               mediaType.StartsWith(
                    "application/xhtml+xml",
                    StringComparison.OrdinalIgnoreCase);
     }
@@ -100,12 +99,15 @@ public sealed class HtmlLinkDiscoveryPlugin : ICrawlPlugin
                 .QuerySelector("base[href]")
                 ?.GetAttribute("href");
 
-        return TryResolveHttpUri(
-            fallbackUri,
-            baseHref,
-            out Uri? resolvedBaseUri)
-                ? resolvedBaseUri
-                : fallbackUri;
+        if (TryResolveHttpUri(
+                fallbackUri,
+                baseHref,
+                out Uri? resolvedBaseUri))
+        {
+            return resolvedBaseUri;
+        }
+
+        return fallbackUri;
     }
 
     private static void AddCandidates(
@@ -155,27 +157,25 @@ public sealed class HtmlLinkDiscoveryPlugin : ICrawlPlugin
                 continue;
             }
 
-            string relationship =
+            string? rel =
                 element.GetAttribute("rel")?.Trim();
 
-            if (string.IsNullOrWhiteSpace(
-                    relationship))
-            {
-                relationship = "link";
-            }
+            string relationship =
+                string.IsNullOrWhiteSpace(rel)
+                    ? "link"
+                    : rel;
 
             discoveredUrls.Add(
                 new DiscoveredUrl(
                     resolvedUri,
-                    Relationship: relationship,
-                    Context: null));
+                    Relationship: relationship));
         }
     }
 
     private static bool TryResolveHttpUri(
         Uri baseUri,
         string? rawUrl,
-        out Uri? resolvedUri)
+        [NotNullWhen(true)] out Uri? resolvedUri)
     {
         resolvedUri = null;
 
@@ -186,8 +186,6 @@ public sealed class HtmlLinkDiscoveryPlugin : ICrawlPlugin
 
         string trimmedUrl = rawUrl.Trim();
 
-        // A fragment is navigation within the current document,
-        // not another resource to crawl.
         if (trimmedUrl.StartsWith('#'))
         {
             return false;

@@ -2,7 +2,6 @@
 using Mycelium.Contracts.Crawling;
 using Mycelium.Contracts.Plugins;
 using Mycelium.Core.Plugins;
-using System.Net;
 
 namespace Mycelium.Test.Plugins;
 
@@ -49,27 +48,27 @@ public sealed class CrawlPluginPipelineTests
                             new CrawlFinding(
                                 Kind: "keyword",
                                 Value: "mycelium")
-                        ],
-                        RenderRequest =
-                            new BrowserRenderRequest(
-                                "JavaScript shell detected.")
+                        ]
                     });
             });
 
-        var pipeline = CreatePipeline(first, second);
+        CrawlPluginPipeline pipeline =
+            CreatePipeline(first, second);
 
         CrawlPluginResult result =
             await pipeline.ExecuteAsync(
-                CreateDocument(),
+                CreateResource(),
                 CancellationToken.None);
 
         Assert.Equal(
-            new[] { "first", "second" },
+            ["first", "second"],
             calls);
 
-        Assert.Equal(2, result.DiscoveredUrls.Count);
+        Assert.Equal(
+            2,
+            result.DiscoveredUrls.Count);
+
         Assert.Single(result.Findings);
-        Assert.NotNull(result.RenderRequest);
     }
 
     [Fact]
@@ -93,12 +92,13 @@ public sealed class CrawlPluginPipelineTests
                     CrawlPluginResult.Empty);
             });
 
-        var pipeline = CreatePipeline(
-            failingPlugin,
-            successfulPlugin);
+        CrawlPluginPipeline pipeline =
+            CreatePipeline(
+                failingPlugin,
+                successfulPlugin);
 
         await pipeline.ExecuteAsync(
-            CreateDocument(),
+            CreateResource(),
             CancellationToken.None);
 
         Assert.True(secondPluginRan);
@@ -121,12 +121,13 @@ public sealed class CrawlPluginPipelineTests
                     CrawlPluginResult.Empty);
             });
 
-        var pipeline = CreatePipeline(plugin);
+        CrawlPluginPipeline pipeline =
+            CreatePipeline(plugin);
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
             async () =>
                 await pipeline.ExecuteAsync(
-                    CreateDocument(),
+                    CreateResource(),
                     cancellationSource.Token));
     }
 
@@ -136,31 +137,33 @@ public sealed class CrawlPluginPipelineTests
             plugins,
             NullLogger<CrawlPluginPipeline>.Instance);
 
-    private static CrawlDocument CreateDocument()
+    private static FetchedResource CreateResource()
     {
-        var uri = new Uri("https://example.com/");
+        var uri =
+            new Uri("https://example.com/");
 
-        return new CrawlDocument
+        return new FetchedResource
         {
             Request = new CrawlRequest
             {
-                Uri = uri,
-                Mode = FetchMode.Http
+                Uri = uri
             },
             FinalUri = uri,
-            StatusCode = HttpStatusCode.OK,
+            ProtocolStatus = new ResourceStatus(
+                Code: "200",
+                Description: "OK"),
+            MediaType = "text/html; charset=utf-8",
             Content = ReadOnlyMemory<byte>.Empty,
             TextContent = "<html></html>",
             FetchedAt = DateTimeOffset.UtcNow,
-            Duration = TimeSpan.FromMilliseconds(20),
-            FetchMode = FetchMode.Http
+            Duration = TimeSpan.FromMilliseconds(20)
         };
     }
 
     private sealed class DelegatePlugin(
         string name,
         Func<
-            CrawlDocument,
+            FetchedResource,
             CancellationToken,
             ValueTask<CrawlPluginResult>> process)
         : ICrawlPlugin
@@ -168,8 +171,8 @@ public sealed class CrawlPluginPipelineTests
         public string Name { get; } = name;
 
         public ValueTask<CrawlPluginResult> ProcessAsync(
-            CrawlDocument document,
+            FetchedResource resource,
             CancellationToken cancellationToken) =>
-            process(document, cancellationToken);
+            process(resource, cancellationToken);
     }
 }

@@ -8,7 +8,7 @@ namespace Mycelium.Cli;
 
 public sealed class MyceliumApplication(
     IEnumerable<ICrawlPlugin> plugins,
-    IPageFetcher pageFetcher,
+    IResourceFetcher resourceFetcher,
     ICrawlPluginPipeline pluginPipeline,
     ILogger<MyceliumApplication> logger)
 {
@@ -85,35 +85,46 @@ public sealed class MyceliumApplication(
         {
             var request = new CrawlRequest
             {
-                Uri = uri,
-                Mode = FetchMode.Http
+                Uri = uri
             };
 
-            CrawlDocument document =
-                await pageFetcher.FetchAsync(
+            FetchedResource resource =
+                await resourceFetcher.FetchAsync(
                     request,
                     cancellationToken);
 
             CrawlPluginResult pluginResult =
                 await pluginPipeline.ExecuteAsync(
-                    document,
+                    resource,
                     cancellationToken);
 
-            Console.WriteLine($"Requested:    {request.Uri}");
-            Console.WriteLine($"Final URL:    {document.FinalUri}");
             Console.WriteLine(
-                $"Status:       {(int)document.StatusCode} " +
-                $"{document.StatusCode}");
+                $"Requested:    {request.Uri}");
+
             Console.WriteLine(
-                $"Content type: {document.ContentType ?? "unknown"}");
+                $"Final URL:    {resource.FinalUri}");
+
             Console.WriteLine(
-                $"Bytes:        {document.Content.Length}");
+                $"Protocol:     {resource.Protocol}");
+
             Console.WriteLine(
-                $"Text decoded: {document.TextContent is not null}");
+                $"Status:       {FormatProtocolStatus(resource.ProtocolStatus)}");
+
             Console.WriteLine(
-                $"Duration:     {document.Duration.TotalMilliseconds:F1} ms");
+                $"Media type:   {resource.MediaType ?? "unknown"}");
+
+            Console.WriteLine(
+                $"Bytes:        {resource.Content.Length}");
+
+            Console.WriteLine(
+                $"Text decoded: {resource.TextContent is not null}");
+
+            Console.WriteLine(
+                $"Duration:     {resource.Duration.TotalMilliseconds:F1} ms");
+
             Console.WriteLine(
                 $"URLs found:   {pluginResult.DiscoveredUrls.Count}");
+
             Console.WriteLine(
                 $"Findings:     {pluginResult.Findings.Count}");
 
@@ -193,5 +204,19 @@ public sealed class MyceliumApplication(
 
             Crawl commands will be added in the next development slices.
             """);
+    }
+
+
+    private static string FormatProtocolStatus(
+        ResourceStatus? status)
+    {
+        if (status is null)
+        {
+            return "not reported";
+        }
+
+        return string.IsNullOrWhiteSpace(status.Description)
+            ? status.Code
+            : $"{status.Code} {status.Description}";
     }
 }

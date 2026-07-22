@@ -1,7 +1,6 @@
 ﻿using Mycelium.Contracts.Crawling;
 using Mycelium.Contracts.Plugins;
 using Mycelium.Plugins.HtmlLinks;
-using System.Net;
 using System.Text;
 
 namespace Mycelium.Test.HtmlLinks;
@@ -29,7 +28,7 @@ public sealed class HtmlLinkDiscoveryPluginTests
 
         CrawlPluginResult result =
             await plugin.ProcessAsync(
-                CreateDocument(Html),
+                CreateResource(Html),
                 CancellationToken.None);
 
         Assert.Collection(
@@ -87,7 +86,7 @@ public sealed class HtmlLinkDiscoveryPluginTests
 
         CrawlPluginResult result =
             await plugin.ProcessAsync(
-                CreateDocument(Html),
+                CreateResource(Html),
                 CancellationToken.None);
 
         DiscoveredUrl discovered =
@@ -106,42 +105,42 @@ public sealed class HtmlLinkDiscoveryPluginTests
         var plugin =
             new HtmlLinkDiscoveryPlugin();
 
-        CrawlDocument document =
-            CreateDocument(
+        FetchedResource resource =
+            CreateResource(
                 """{"url":"https://example.com"}""",
                 "application/json");
 
         CrawlPluginResult result =
             await plugin.ProcessAsync(
-                document,
+                resource,
                 CancellationToken.None);
 
         Assert.Empty(result.DiscoveredUrls);
         Assert.Empty(result.Findings);
     }
 
-    private static CrawlDocument CreateDocument(
+    private static FetchedResource CreateResource(
         string content,
-        string contentType = "text/html; charset=utf-8")
+        string mediaType = "text/html; charset=utf-8")
     {
         var uri =
             new Uri("https://example.com/index.html");
 
-        return new CrawlDocument
+        return new FetchedResource
         {
             Request = new CrawlRequest
             {
-                Uri = uri,
-                Mode = FetchMode.Http
+                Uri = uri
             },
             FinalUri = uri,
-            StatusCode = HttpStatusCode.OK,
-            ContentType = contentType,
+            ProtocolStatus = new ResourceStatus(
+                Code: "200",
+                Description: "OK"),
+            MediaType = mediaType,
             Content = Encoding.UTF8.GetBytes(content),
             TextContent = content,
             FetchedAt = DateTimeOffset.UtcNow,
-            Duration = TimeSpan.FromMilliseconds(10),
-            FetchMode = FetchMode.Http
+            Duration = TimeSpan.FromMilliseconds(10)
         };
     }
 }

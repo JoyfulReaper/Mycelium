@@ -6,6 +6,6 @@ namespace Mycelium.Core.Plugins;
 public interface ICrawlPluginPipeline
 {
     ValueTask<CrawlPluginResult> ExecuteAsync(
-        CrawlDocument document,
+        FetchedResource resource,
         CancellationToken cancellationToken);
 }

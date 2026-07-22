@@ -14,19 +14,18 @@ public sealed partial class CrawlPluginPipeline(
         plugins.ToArray();
 
     public async ValueTask<CrawlPluginResult> ExecuteAsync(
-        CrawlDocument document,
+        FetchedResource resource,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(document);
+        ArgumentNullException.ThrowIfNull(resource);
 
         var discoveredUrls = new List<DiscoveredUrl>();
         var findings = new List<CrawlFinding>();
-        BrowserRenderRequest? renderRequest = null;
 
         LogPipelineStarted(
             logger,
             _plugins.Count,
-            document.FinalUri);
+            resource.FinalUri);
 
         foreach (ICrawlPlugin plugin in _plugins)
         {
@@ -38,15 +37,11 @@ public sealed partial class CrawlPluginPipeline(
             {
                 CrawlPluginResult result =
                     await plugin.ProcessAsync(
-                        document,
+                        resource,
                         cancellationToken);
 
                 discoveredUrls.AddRange(result.DiscoveredUrls);
                 findings.AddRange(result.Findings);
-
-                // Rendering only needs to happen once. Retain the first
-                // plugin's reason for requesting it.
-                renderRequest ??= result.RenderRequest;
 
                 long elapsedMilliseconds =
                     (long)Stopwatch
@@ -56,7 +51,7 @@ public sealed partial class CrawlPluginPipeline(
                 LogPluginCompleted(
                     logger,
                     plugin.Name,
-                    document.FinalUri,
+                    resource.FinalUri,
                     elapsedMilliseconds,
                     result.DiscoveredUrls.Count,
                     result.Findings.Count);
@@ -73,23 +68,21 @@ public sealed partial class CrawlPluginPipeline(
                 LogPluginFailed(
                     logger,
                     plugin.Name,
-                    document.FinalUri,
+                    resource.FinalUri,
                     exception);
             }
         }
 
         LogPipelineCompleted(
             logger,
-            document.FinalUri,
+            resource.FinalUri,
             discoveredUrls.Count,
-            findings.Count,
-            renderRequest is not null);
+            findings.Count);
 
         return new CrawlPluginResult
         {
             DiscoveredUrls = discoveredUrls,
-            Findings = findings,
-            RenderRequest = renderRequest
+            Findings = findings
         };
     }
 
@@ -135,12 +128,10 @@ public sealed partial class CrawlPluginPipeline(
         Level = LogLevel.Debug,
         Message =
             "Plugin pipeline completed for {Uri}: " +
-            "{DiscoveredUrlCount} URLs, {FindingCount} findings, " +
-            "browser rendering requested: {BrowserRenderRequested}.")]
+            "{DiscoveredUrlCount} URLs and {FindingCount} findings.")]
     private static partial void LogPipelineCompleted(
         ILogger logger,
         Uri uri,
         int discoveredUrlCount,
-        int findingCount,
-        bool browserRenderRequested);
+        int findingCount);
 }

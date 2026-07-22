@@ -39,7 +39,7 @@ public static class MyceliumServiceCollectionExtensions
             .ValidateOnStart();
 
         services
-            .AddHttpClient<IPageFetcher, HttpPageFetcher>(
+            .AddHttpClient<IResourceFetcher, HttpResourceFetcher>(
                 (serviceProvider, client) =>
                 {
                     HttpFetchOptions options =

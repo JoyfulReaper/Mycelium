@@ -3,24 +3,25 @@ using Microsoft.Extensions.Options;
 using Mycelium.Contracts.Crawling;
 using System.Buffers;
 using System.Diagnostics;
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 
 namespace Mycelium.Core.Fetching;
 
-public sealed partial class HttpPageFetcher(
+public sealed partial class HttpResourceFetcher(
     HttpClient httpClient,
     IOptions<HttpFetchOptions> options,
-    ILogger<HttpPageFetcher> logger)
-    : IPageFetcher
+    ILogger<HttpResourceFetcher> logger)
+    : IResourceFetcher
 {
     private const int BufferSize = 81920;
 
     private readonly HttpFetchOptions _options =
         options.Value;
 
-    public async Task<CrawlDocument> FetchAsync(
+    public async Task<FetchedResource> FetchAsync(
         CrawlRequest request,
         CancellationToken cancellationToken)
     {
@@ -52,7 +53,7 @@ public sealed partial class HttpPageFetcher(
         }
     }
 
-    private async Task<CrawlDocument> FetchCoreAsync(
+    private async Task<FetchedResource> FetchCoreAsync(
         CrawlRequest request,
         CancellationToken cancellationToken)
     {
@@ -127,19 +128,21 @@ public sealed partial class HttpPageFetcher(
                 content.Length,
                 response.Content.Headers.ContentType?.ToString());
 
-            return new CrawlDocument
+            return new FetchedResource
             {
                 Request = request,
                 FinalUri = finalUri,
-                StatusCode = response.StatusCode,
-                Headers = headers,
-                ContentType =
-                    response.Content.Headers.ContentType?.ToString(),
+                ProtocolStatus = new ResourceStatus(
+                    ((int)response.StatusCode)
+                        .ToString(CultureInfo.InvariantCulture),
+                response.ReasonPhrase),
+                Metadata = headers,
+                MediaType =
+                response.Content.Headers.ContentType?.ToString(),
                 Content = content,
                 TextContent = textContent,
                 FetchedAt = DateTimeOffset.UtcNow,
-                Duration = duration,
-                FetchMode = FetchMode.Http
+                Duration = duration
             };
         }
     }
@@ -349,6 +352,15 @@ public sealed partial class HttpPageFetcher(
                 "Only absolute HTTP and HTTPS URLs are supported.",
                 nameof(uri));
         }
+    }
+
+    public bool CanFetch(Uri uri)
+    {
+        ArgumentNullException.ThrowIfNull(uri);
+
+        return uri.IsAbsoluteUri &&
+               (uri.Scheme == Uri.UriSchemeHttp ||
+                uri.Scheme == Uri.UriSchemeHttps);
     }
 
     [LoggerMessage(

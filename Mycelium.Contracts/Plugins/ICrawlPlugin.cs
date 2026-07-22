@@ -7,6 +7,6 @@ public interface ICrawlPlugin
     string Name { get; }
 
     ValueTask<CrawlPluginResult> ProcessAsync(
-        CrawlDocument document,
+        FetchedResource resource,
         CancellationToken cancellationToken);
 }
