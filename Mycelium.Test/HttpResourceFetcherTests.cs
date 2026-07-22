@@ -50,7 +50,7 @@ public sealed class HttpResourceFetcherTests
             resource.ProtocolStatus.Description);
 
         Assert.Equal(
-            "http",
+            Uri.UriSchemeHttps,
             resource.Protocol);
 
         Assert.StartsWith(
